@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gesetzbücher — Strada Department of Justice</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand" onclick="showHome()">
+      <div class="seal">DOJ</div>
+      <div class="brand-text">
+        <div class="b1">Strada</div>
+        <div class="b2">Department of Justice</div>
+      </div>
+    </div>
+    <div class="right-controls">
+      <nav class="toplinks">
+        <span onclick="showHome()" style="cursor:pointer;">Startseite</span>
+        <span onclick="showHome()" style="cursor:pointer;">Gesetzbücher</span>
+      </nav>
+      <div id="auth-area"></div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="home-view">
+    <section class="hero">
+      <div class="badge">✔ Offiziell</div>
+      <div class="seal-lg">DOJ</div>
+      <h1>Gesetzbücher</h1>
+      <div class="sub">Strada Department of Justice</div>
+      <div class="desc">Die vollständige, offizielle Gesetzessammlung des Staates — verbindlich für Behörden, Gerichte und Bürger.</div>
+      <div class="stats">
+        <div class="stat"><div class="num" id="stat-cats">–</div><div class="lbl">Kategorien</div></div>
+        <div class="stat"><div class="num" id="stat-laws">–</div><div class="lbl">Gesetze</div></div>
+      </div>
+    </section>
+    <div id="categories-container">
+      <p style="text-align:center;color:var(--text-dimmer);font-family:'Segoe UI',Arial,sans-serif;">Lade Gesetze…</p>
+    </div>
+  </div>
+
+  <div id="law-view" hidden></div>
+</main>
+
+<footer>
+  <div class="seal"></div>
+  Strada Department of Justice &middot; Offizielle Gesetzessammlung<br>
+  &copy; 2026 Attorney General's Office — Alle Rechte vorbehalten.
+</footer>
+
+<script src="assets/config.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

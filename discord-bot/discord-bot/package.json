@@ -1,0 +1,14 @@
+{
+  "name": "gesetzbuch-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord Bot: prüft Rollen und meldet Änderungen am Gesetzbuch",
+  "main": "bot.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5"
+  }
+}
