@@ -4,7 +4,7 @@
 // ============================================================
 window.SITE_CONFIG = {
   // Discord Developer Portal -> OAuth2 -> General -> "CLIENT ID"
-  DISCORD_CLIENT_ID: "DEINE_CLIENT_ID_HIER",
+  DISCORD_CLIENT_ID: "1541565433877110876",
 
   // Muss EXAKT mit einer "Redirect" URL im Developer Portal übereinstimmen.
   // Für GitHub Pages z.B.: https://deinname.github.io/dein-repo/
