@@ -12,5 +12,5 @@ window.SITE_CONFIG = {
 
   // Adresse deines Backend-Servers (Railway/Render), OHNE Slash am Ende.
   // Lokal zum Testen z.B.: http://localhost:4000
-  BACKEND_URL: "https://DEIN-BACKEND.up.railway.app",
+  BACKEND_URL: "https://github.com/fellifive/Strada-Gesetztbuecher/blob/main/assets/config.js",
 };
