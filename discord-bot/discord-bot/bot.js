@@ -153,6 +153,11 @@ const server = http.createServer(async (req, res) => {
   setCors(res);
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
+  // GET / oder /health -> für den Wach-Halte-Dienst (z.B. UptimeRobot)
+  if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
+    return sendJson(res, 200, { status: 'ok', botOnline: client.isReady() });
+  }
+
   // POST /check-role   { accessToken }
   if (req.method === 'POST' && req.url === '/check-role') {
     try {
