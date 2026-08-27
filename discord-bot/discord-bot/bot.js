@@ -201,4 +201,17 @@ server.listen(PORT, () => {
   console.log(`Backend-Server läuft auf Port ${PORT}`);
 });
 
-client.login(DISCORD_BOT_TOKEN);
+// Diagnose: falls der Login hängt oder fehlschlägt, wollen wir das sehen
+client.on('error', (err) => console.error('DISCORD CLIENT FEHLER:', err));
+client.on('shardError', (err) => console.error('DISCORD SHARD FEHLER:', err));
+
+console.log('Versuche, Bot einzuloggen...');
+client.login(DISCORD_BOT_TOKEN)
+  .then(() => console.log('client.login() Promise aufgelöst.'))
+  .catch((err) => console.error('LOGIN FEHLGESCHLAGEN:', err));
+
+setTimeout(() => {
+  if (!client.isReady()) {
+    console.warn('WARNUNG: Nach 15 Sekunden immer noch nicht eingeloggt. Token/Intents prüfen.');
+  }
+}, 15000);
