@@ -35,6 +35,7 @@ if (!GITHUB_TOKEN || !GITHUB_REPO) {
 
 const EDITOR_ROLE_IDS = DISCORD_EDITOR_ROLE_IDS.split(',').map((s) => s.trim());
 
+// "Server Members Intent" muss im Developer Portal aktiviert sein!
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
 });
@@ -43,6 +44,9 @@ client.once('ready', () => {
   console.log(`Bot eingeloggt als ${client.user.tag}`);
 });
 
+// ------------------------------------------------------------
+// Discord-Hilfsfunktionen
+// ------------------------------------------------------------
 async function getDiscordUserFromToken(accessToken) {
   const res = await fetch('https://discord.com/api/users/@me', {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -80,6 +84,9 @@ async function postChangeNotification({ lawCode, lawTitle, editorName, summary, 
   await channel.send({ embeds: [embed] });
 }
 
+// ------------------------------------------------------------
+// GitHub: laws.json lesen, ein Gesetz ändern, zurückschreiben
+// ------------------------------------------------------------
 async function githubGetFile() {
   const res = await fetch(
     `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_DATA_PATH}?ref=${GITHUB_BRANCH}`,
@@ -117,6 +124,9 @@ async function githubUpdateFile(newJsonObj, sha, commitMessage) {
   return res.json();
 }
 
+// ------------------------------------------------------------
+// HTTP-Server mit CORS für die GitHub-Pages-Seite
+// ------------------------------------------------------------
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -143,10 +153,12 @@ const server = http.createServer(async (req, res) => {
   setCors(res);
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
+  // GET / oder /health -> für den Wach-Halte-Dienst (z.B. UptimeRobot)
   if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
     return sendJson(res, 200, { status: 'ok', botOnline: client.isReady() });
   }
 
+  // POST /check-role   { accessToken }
   if (req.method === 'POST' && req.url === '/check-role') {
     try {
       const { accessToken } = await readBody(req);
@@ -161,6 +173,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // POST /save-law   { accessToken, slug, lawCode, lawTitle, newBody }
   if (req.method === 'POST' && req.url === '/save-law') {
     try {
       const { accessToken, slug, lawCode, lawTitle, newBody } = await readBody(req);
@@ -168,6 +181,7 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { error: 'Fehlende Felder' });
       }
 
+      // Wichtig: Rolle IMMER server-seitig neu prüfen, dem Client nicht vertrauen
       const me = await getDiscordUserFromToken(accessToken);
       if (!me) return sendJson(res, 401, { error: 'ungueltiges Token' });
       const roleCheck = await userHasEditorRole(me.id);
@@ -206,6 +220,7 @@ client.on('error', (err) => console.error('DISCORD CLIENT FEHLER:', err));
 client.on('shardError', (err) => console.error('DISCORD SHARD FEHLER:', err));
 
 console.log('Versuche, Bot einzuloggen...');
+client.on('debug', (m) => console.log('[DISCORD DEBUG]', m));
 client.login(DISCORD_BOT_TOKEN)
   .then(() => console.log('client.login() Promise aufgelöst.'))
   .catch((err) => console.error('LOGIN FEHLGESCHLAGEN:', err));
