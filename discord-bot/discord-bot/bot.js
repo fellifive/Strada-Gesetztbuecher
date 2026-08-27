@@ -508,4 +508,21 @@ server.listen(PORT, () => {
   console.log(`Backend-Server läuft auf Port ${PORT}`);
 });
 
-client.login(DISCORD_BOT_TOKEN);
+client.on('error', (err) => {
+  console.error('Discord-Client-Fehler:', err);
+});
+
+client.on('shardError', (err) => {
+  console.error('Shard-Fehler (Verbindungsproblem zu Discord):', err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('Unbehandelter Fehler (unhandledRejection):', err);
+});
+
+console.log('Versuche, Bot einzuloggen...');
+client.login(DISCORD_BOT_TOKEN)
+  .then(() => console.log('client.login() erfolgreich aufgeloest.'))
+  .catch((err) => {
+    console.error('FEHLER beim Login:', err);
+  });
