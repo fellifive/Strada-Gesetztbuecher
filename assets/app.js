@@ -16,7 +16,6 @@ async function loadLaws() {
 }
 
 function formatBody(body) {
-  // Wandelt reinen Gesetzestext in HTML um (§-Überschriften erkennen)
   const lines = body.split('\n').map((l) => l.trim());
   let html = '';
   let para = [];
@@ -163,7 +162,6 @@ async function saveEdit(slug) {
       return;
     }
 
-    // Lokal sofort aktualisieren, damit man die Änderung direkt sieht
     law.body = newBody;
     statusEl.textContent = 'Gespeichert! Die Änderung wurde ins Repository geschrieben.';
     statusEl.className = 'save-status ok';
@@ -210,19 +208,16 @@ function logout() {
 }
 
 async function handleAuthRedirect() {
-  // Discord hängt das Token als #access_token=... an die URL an
   if (location.hash.includes('access_token')) {
     const params = new URLSearchParams(location.hash.substring(1));
     const accessToken = params.get('access_token');
     if (accessToken) {
       await loginWithToken(accessToken);
-      // Hash bereinigen, aber Slug (falls vorhanden) verlieren wir hier bewusst -> zurück zur Startseite
       history.replaceState(null, '', location.pathname);
     }
     return;
   }
 
-  // Session aus vorherigem Login wiederherstellen
   const saved = sessionStorage.getItem('discord_session');
   if (saved) {
     try {
@@ -266,9 +261,11 @@ async function loginWithToken(accessToken, silent = false) {
 // ------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', async () => {
   renderAuthArea();
-  await handleAuthRedirect();
-  renderAuthArea();
-  await loadLaws();
+
+  const lawsPromise = loadLaws();
+  const authPromise = handleAuthRedirect().then(() => renderAuthArea());
+
+  await lawsPromise;
 
   const hash = location.hash.replace('#', '');
   if (hash && findLaw(hash)) {
@@ -276,4 +273,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   } else {
     showHome();
   }
+
+  authPromise.then(() => {
+    const openLaw = document.querySelector('.law-detail');
+    if (openLaw) showLaw(openLaw.dataset.slug);
+  });
 });
