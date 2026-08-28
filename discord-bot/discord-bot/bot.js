@@ -3,11 +3,17 @@
 // 1. Rollen prüfen (per Discord-Access-Token des eingeloggten Users)
 // 2. Gesetzesänderungen ins GitHub-Repo speichern
 // 3. Discord-Nachricht posten, wenn ein Gesetz geändert wurde
+//
+// WICHTIG: Diese Version nutzt NUR normale REST-Anfragen an die
+// Discord-API (keine dauerhafte "Gateway"-Verbindung). Das umgeht
+// ein Problem, bei dem manche kostenlosen Hosting-Anbieter die
+// dauerhafte WebSocket-Verbindung von Discord-Bots blockieren.
+// Nachteil: Der Bot zeigt in Discord kein grünes "Online"-Symbol.
+// Vorteil: Rollen prüfen & Nachrichten senden funktionieren trotzdem.
 // ============================================================
 
 require('dotenv').config();
 const http = require('http');
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 
 const {
   DISCORD_BOT_TOKEN,
@@ -17,7 +23,7 @@ const {
   GITHUB_TOKEN,
   GITHUB_REPO,
   GITHUB_BRANCH = 'main',
-  GITHUB_DATA_PATH = 'site/data/laws.json',
+  GITHUB_DATA_PATH = 'data/laws.json',
   ALLOWED_ORIGIN = '*',
   PORT = 4000,
 } = process.env;
@@ -34,21 +40,13 @@ if (!GITHUB_TOKEN || !GITHUB_REPO) {
 }
 
 const EDITOR_ROLE_IDS = DISCORD_EDITOR_ROLE_IDS.split(',').map((s) => s.trim());
-
-// "Server Members Intent" muss im Developer Portal aktiviert sein!
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
-});
-
-client.once('ready', () => {
-  console.log(`Bot eingeloggt als ${client.user.tag}`);
-});
+const DISCORD_API = 'https://discord.com/api/v10';
 
 // ------------------------------------------------------------
-// Discord-Hilfsfunktionen
+// Discord-Hilfsfunktionen (reine REST-Aufrufe, kein Gateway nötig)
 // ------------------------------------------------------------
 async function getDiscordUserFromToken(accessToken) {
-  const res = await fetch('https://discord.com/api/users/@me', {
+  const res = await fetch(`${DISCORD_API}/users/@me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) return null;
@@ -56,32 +54,41 @@ async function getDiscordUserFromToken(accessToken) {
 }
 
 async function userHasEditorRole(userId) {
-  const guild = await client.guilds.fetch(DISCORD_GUILD_ID);
-  let member;
-  try {
-    member = await guild.members.fetch(userId);
-  } catch (err) {
-    return { allowed: false, reason: 'not_in_guild' };
+  const res = await fetch(`${DISCORD_API}/guilds/${DISCORD_GUILD_ID}/members/${userId}`, {
+    headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}` },
+  });
+  if (res.status === 404) return { allowed: false, reason: 'not_in_guild' };
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Mitglied konnte nicht geprüft werden (${res.status}): ${text}`);
   }
-  const roles = member.roles.cache.map((r) => r.id);
+  const member = await res.json();
+  const roles = member.roles || [];
   const allowed = roles.some((id) => EDITOR_ROLE_IDS.includes(id));
-  return { allowed, reason: allowed ? 'ok' : 'missing_role', username: member.user.username, roles };
+  return { allowed, reason: allowed ? 'ok' : 'missing_role', username: member.user?.username, roles };
 }
 
 async function postChangeNotification({ lawCode, lawTitle, editorName, summary, url }) {
   if (!DISCORD_LOG_CHANNEL_ID) return;
-  const channel = await client.channels.fetch(DISCORD_LOG_CHANNEL_ID);
-  if (!channel || !channel.isTextBased()) return;
-
-  const embed = new EmbedBuilder()
-    .setTitle(`📜 Gesetz geändert: ${lawCode ?? ''} ${lawTitle ?? ''}`.trim())
-    .setDescription(summary || 'Keine Zusammenfassung angegeben.')
-    .setColor(0xc9a24b)
-    .setTimestamp(new Date());
-  if (editorName) embed.addFields({ name: 'Geändert von', value: editorName, inline: true });
-  if (url) embed.setURL(url);
-
-  await channel.send({ embeds: [embed] });
+  const embed = {
+    title: `📜 Gesetz geändert: ${lawCode ?? ''} ${lawTitle ?? ''}`.trim(),
+    description: summary || 'Keine Zusammenfassung angegeben.',
+    color: 0xc9a24b,
+    timestamp: new Date().toISOString(),
+    fields: editorName ? [{ name: 'Geändert von', value: editorName, inline: true }] : [],
+    url: url || undefined,
+  };
+  const res = await fetch(`${DISCORD_API}/channels/${DISCORD_LOG_CHANNEL_ID}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bot ${DISCORD_BOT_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ embeds: [embed] }),
+  });
+  if (!res.ok) {
+    console.error('Discord-Nachricht konnte nicht gesendet werden:', res.status, await res.text());
+  }
 }
 
 // ------------------------------------------------------------
@@ -155,7 +162,7 @@ const server = http.createServer(async (req, res) => {
 
   // GET / oder /health -> für den Wach-Halte-Dienst (z.B. UptimeRobot)
   if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
-    return sendJson(res, 200, { status: 'ok', botOnline: client.isReady() });
+    return sendJson(res, 200, { status: 'ok' });
   }
 
   // POST /check-role   { accessToken }
@@ -169,7 +176,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, result);
     } catch (err) {
       console.error(err);
-      return sendJson(res, 500, { error: 'internal_error' });
+      return sendJson(res, 500, { error: 'internal_error', message: err.message });
     }
   }
 
@@ -181,7 +188,6 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { error: 'Fehlende Felder' });
       }
 
-      // Wichtig: Rolle IMMER server-seitig neu prüfen, dem Client nicht vertrauen
       const me = await getDiscordUserFromToken(accessToken);
       if (!me) return sendJson(res, 401, { error: 'ungueltiges Token' });
       const roleCheck = await userHasEditorRole(me.id);
@@ -214,19 +220,3 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`Backend-Server läuft auf Port ${PORT}`);
 });
-
-// Diagnose: falls der Login hängt oder fehlschlägt, wollen wir das sehen
-client.on('error', (err) => console.error('DISCORD CLIENT FEHLER:', err));
-client.on('shardError', (err) => console.error('DISCORD SHARD FEHLER:', err));
-
-console.log('Versuche, Bot einzuloggen...');
-client.on('debug', (m) => console.log('[DISCORD DEBUG]', m));
-client.login(DISCORD_BOT_TOKEN)
-  .then(() => console.log('client.login() Promise aufgelöst.'))
-  .catch((err) => console.error('LOGIN FEHLGESCHLAGEN:', err));
-
-setTimeout(() => {
-  if (!client.isReady()) {
-    console.warn('WARNUNG: Nach 15 Sekunden immer noch nicht eingeloggt. Token/Intents prüfen.');
-  }
-}, 15000);
