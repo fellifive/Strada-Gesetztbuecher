@@ -1,13 +1,14 @@
 {
   "name": "gesetzbuch-discord-bot",
   "version": "1.0.0",
-  "description": "Backend-Server: prüft Discord-Rollen, speichert Gesetzesänderungen, meldet Änderungen in Discord",
+  "description": "Backend-Server: Gesetzbuch-Rollen, Tickets, Personalverwaltungs-Befehle",
   "main": "bot.js",
   "type": "commonjs",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "tweetnacl": "^1.0.3"
   }
 }
