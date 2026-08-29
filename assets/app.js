@@ -16,6 +16,7 @@ async function loadLaws() {
 }
 
 function formatBody(body) {
+  // Wandelt reinen Gesetzestext in HTML um (§-Überschriften erkennen)
   const lines = body.split('\n').map((l) => l.trim());
   let html = '';
   let para = [];
@@ -78,6 +79,7 @@ function renderHome() {
 function showHome() {
   document.getElementById('home-view').hidden = false;
   document.getElementById('law-view').hidden = true;
+  document.getElementById('ticket-view').hidden = true;
   window.scrollTo(0, 0);
   history.replaceState(null, '', location.pathname);
 }
@@ -90,6 +92,7 @@ function showLaw(slug) {
   const law = findLaw(slug);
   if (!law) return;
   document.getElementById('home-view').hidden = true;
+  document.getElementById('ticket-view').hidden = true;
   const view = document.getElementById('law-view');
   view.hidden = false;
 
@@ -162,6 +165,7 @@ async function saveEdit(slug) {
       return;
     }
 
+    // Lokal sofort aktualisieren, damit man die Änderung direkt sieht
     law.body = newBody;
     statusEl.textContent = 'Gespeichert! Die Änderung wurde ins Repository geschrieben.';
     statusEl.className = 'save-status ok';
@@ -169,6 +173,122 @@ async function saveEdit(slug) {
   } catch (err) {
     statusEl.textContent = 'Verbindung zum Server fehlgeschlagen.';
     statusEl.className = 'save-status err';
+  }
+}
+
+// ------------------------------------------------------------
+// 3b. Ticket-Dashboard
+// ------------------------------------------------------------
+function showTickets() {
+  document.getElementById('home-view').hidden = true;
+  document.getElementById('law-view').hidden = true;
+  const view = document.getElementById('ticket-view');
+  view.hidden = false;
+  window.scrollTo(0, 0);
+  history.replaceState(null, '', '#tickets');
+  renderTickets();
+}
+
+async function renderTickets() {
+  const view = document.getElementById('ticket-view');
+
+  if (!CURRENT_USER) {
+    view.innerHTML = `
+      <div class="law-detail">
+        <button class="back-btn" onclick="showHome()">← Zurück zur Übersicht</button>
+        <p style="font-family:'Segoe UI',Arial,sans-serif;color:var(--text-dim);">
+          Bitte logge dich mit Discord ein, um ein Ticket zu eröffnen.
+        </p>
+      </div>`;
+    return;
+  }
+
+  view.innerHTML = `
+    <div class="law-detail">
+      <button class="back-btn" onclick="showHome()">← Zurück zur Übersicht</button>
+      <div class="law-detail-head">
+        <div><h1>🎫 Tickets</h1></div>
+        <button class="edit-btn" onclick="createTicket()">+ Neues Ticket</button>
+      </div>
+      <div id="ticket-list" style="font-family:'Segoe UI',Arial,sans-serif;color:var(--text-dim);">Lade…</div>
+    </div>
+  `;
+
+  try {
+    const res = await fetch(`${CFG.BACKEND_URL}/tickets/list`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken: CURRENT_USER.accessToken }),
+    });
+    const data = await res.json();
+    const listEl = document.getElementById('ticket-list');
+
+    if (res.status === 403) {
+      listEl.innerHTML = `<p>Du siehst keine Ticket-Liste, kannst aber oben ein neues Ticket eröffnen.</p>`;
+      return;
+    }
+    if (!res.ok) {
+      listEl.innerHTML = `<p style="color:var(--red);">Fehler: ${escapeHtml(data.error || 'unbekannt')}</p>`;
+      return;
+    }
+
+    if (!data.tickets.length) {
+      listEl.innerHTML = `<p>Aktuell keine offenen Tickets.</p>`;
+      return;
+    }
+
+    listEl.innerHTML = data.tickets.map((t) => `
+      <div class="law-chip" style="margin-bottom:10px; display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <div class="chip-code">#${escapeHtml(t.name)}</div>
+          <div class="chip-title">${escapeHtml(t.topic || '')}</div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <a class="cancel-btn" style="text-decoration:none;" href="https://discord.com/channels/${CFG.DISCORD_GUILD_ID || ''}/${t.id}" target="_blank">Öffnen</a>
+          <button class="save-btn" onclick="closeTicket('${t.id}')">Schließen</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    document.getElementById('ticket-list').innerHTML = `<p style="color:var(--red);">Verbindung fehlgeschlagen.</p>`;
+  }
+}
+
+async function createTicket() {
+  try {
+    const res = await fetch(`${CFG.BACKEND_URL}/tickets/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken: CURRENT_USER.accessToken }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert('Fehler beim Erstellen: ' + (data.error || 'unbekannt'));
+      return;
+    }
+    window.open(data.url, '_blank');
+    renderTickets();
+  } catch (err) {
+    alert('Verbindung fehlgeschlagen.');
+  }
+}
+
+async function closeTicket(channelId) {
+  if (!confirm('Dieses Ticket wirklich schließen?')) return;
+  try {
+    const res = await fetch(`${CFG.BACKEND_URL}/tickets/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken: CURRENT_USER.accessToken, channelId }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      alert('Fehler beim Schließen: ' + (data.error || 'unbekannt'));
+      return;
+    }
+    renderTickets();
+  } catch (err) {
+    alert('Verbindung fehlgeschlagen.');
   }
 }
 
@@ -208,16 +328,19 @@ function logout() {
 }
 
 async function handleAuthRedirect() {
+  // Discord hängt das Token als #access_token=... an die URL an
   if (location.hash.includes('access_token')) {
     const params = new URLSearchParams(location.hash.substring(1));
     const accessToken = params.get('access_token');
     if (accessToken) {
       await loginWithToken(accessToken);
+      // Hash bereinigen, aber Slug (falls vorhanden) verlieren wir hier bewusst -> zurück zur Startseite
       history.replaceState(null, '', location.pathname);
     }
     return;
   }
 
+  // Session aus vorherigem Login wiederherstellen
   const saved = sessionStorage.getItem('discord_session');
   if (saved) {
     try {
@@ -262,6 +385,9 @@ async function loginWithToken(accessToken, silent = false) {
 window.addEventListener('DOMContentLoaded', async () => {
   renderAuthArea();
 
+  // Wichtig: Gesetze laden und Login-Prüfung GLEICHZEITIG starten,
+  // damit ein langsamer/schlafender Backend-Server nicht das Laden
+  // der Gesetze blockiert.
   const lawsPromise = loadLaws();
   const authPromise = handleAuthRedirect().then(() => renderAuthArea());
 
@@ -274,6 +400,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     showHome();
   }
 
+  // Login-Ergebnis im Hintergrund fertig abwarten; sobald es durch ist,
+  // Editor-Button ggf. nachträglich einblenden, falls man gerade auf
+  // einer Gesetzesseite ist.
   authPromise.then(() => {
     const openLaw = document.querySelector('.law-detail');
     if (openLaw) showLaw(openLaw.dataset.slug);
