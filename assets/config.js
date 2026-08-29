@@ -13,4 +13,7 @@ window.SITE_CONFIG = {
   // Adresse deines Backend-Servers (Railway/Render), OHNE Slash am Ende.
   // Lokal zum Testen z.B.: http://localhost:4000
   BACKEND_URL: "https://strada-gesetztbuecher.onrender.com",
+
+  // Deine Discord Server-ID (für Ticket-Links)
+  DISCORD_GUILD_ID: "1537884709483188304",
 };
