@@ -1,0 +1,15 @@
+[
+  {
+    "id": "957211762657230858-1788184812961",
+    "userId": "957211762657230858",
+    "username": "felifive",
+    "amount": 30,
+    "reason": "Test",
+    "strike": 1,
+    "status": "unpaid",
+    "createdAt": 1788184812961,
+    "issuedBy": "957211762657230858",
+    "messageId": "1543983755759321263",
+    "channelId": "1537884711165231256"
+  }
+]
