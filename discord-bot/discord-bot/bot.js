@@ -32,10 +32,11 @@ const {
 
 // ---- Feste IDs (RP-Server-spezifisch) ----
 const EINSTELLEN_ALLOWED_ROLE_IDS = ['1537884709537714432', '1537884709537714431', '1537884709537714430'];
-const EINSTELLEN_AUTO_ROLE_ID = '1537884709483188307'; // wird jeder eingestellten Person automatisch gegeben
+const EINSTELLEN_AUTO_ROLE_ID = '1537884709483188307';
 const EINSTELLEN_ANNOUNCE_CHANNEL_ID = '1538223126230605967';
 const CHANGELOG_CHANNEL_ID = '1538161271374090333';
 const DM_LOG_CHANNEL_ID = '1548612480769728523';
+const DM_LOG_OWNER_ID = '957211762657230858'; // wird bei eingehender DM gepingt
 
 const required = { DISCORD_BOT_TOKEN, DISCORD_GUILD_ID, DISCORD_EDITOR_ROLE_IDS };
 for (const [key, value] of Object.entries(required)) {
@@ -56,13 +57,13 @@ const STAFF_ROLE_IDS = (TICKET_STAFF_ROLE_IDS || '').split(',').map((s) => s.tri
 const DISCORD_API = 'https://discord.com/api/v10';
 
 // ------------------------------------------------------------
-// Berechtigungs-Bitflags (für Interaktionen ohne discord.js-Objekte)
+// Berechtigungs-Bitflags
 // ------------------------------------------------------------
 const PERMS = {
   BAN_MEMBERS: 1n << 2n,
   MANAGE_MESSAGES: 1n << 13n,
   MANAGE_ROLES: 1n << 28n,
-  MODERATE_MEMBERS: 1n << 40n, // Timeout
+  MODERATE_MEMBERS: 1n << 40n,
 };
 
 function hasPermission(permissionsStr, flag) {
@@ -74,7 +75,7 @@ function hasPermission(permissionsStr, flag) {
 }
 
 // ------------------------------------------------------------
-// Kleine Discord-REST-Hilfsfunktionen
+// Discord-REST-Hilfsfunktionen
 // ------------------------------------------------------------
 async function discordFetch(path, options = {}) {
   const res = await fetch(`${DISCORD_API}${path}`, {
@@ -165,7 +166,6 @@ async function postChangeNotification({ lawCode, lawTitle, editorName, summary, 
   await postChannelMessage(DISCORD_LOG_CHANNEL_ID, { embeds: [embed] }).catch((e) => console.error(e));
 }
 
-// Höchste (nach Position) Rolle einer Person ermitteln, um sie als "Rang" zu verwenden
 async function getTopRoleMention(memberRoleIds) {
   const res = await discordFetch(`/guilds/${DISCORD_GUILD_ID}/roles`);
   if (!res.ok) return null;
@@ -177,7 +177,7 @@ async function getTopRoleMention(memberRoleIds) {
 }
 
 // ------------------------------------------------------------
-// GitHub: JSON-Datei lesen / schreiben (für Gesetze & Verwarnungen)
+// GitHub: JSON-Datei lesen / schreiben
 // ------------------------------------------------------------
 async function githubGetFile(path) {
   const res = await fetch(
@@ -224,7 +224,7 @@ async function saveWarns(warns, sha, commitMessage) {
 }
 
 // ------------------------------------------------------------
-// Changelog-Nachricht bauen (für den "Posten"-Knopf auf der Website)
+// Changelog-Nachricht bauen
 // ------------------------------------------------------------
 function formatDateGerman(date) {
   return date.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -265,7 +265,7 @@ function buildChangelogMessage({ added = [], edited = [], removed = [] }) {
 }
 
 // ------------------------------------------------------------
-// HTTP-Server: Grundgerüst, CORS, Body lesen (roh + JSON)
+// HTTP-Server: Grundgerüst, CORS, Body lesen
 // ------------------------------------------------------------
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
@@ -301,7 +301,7 @@ function verifyDiscordSignature(rawBody, signature, timestamp) {
 }
 
 // ------------------------------------------------------------
-// Slash-Commands registrieren (einmalig per Browser-Aufruf)
+// Slash-Commands registrieren
 // ------------------------------------------------------------
 const COMMANDS = [
   {
@@ -378,7 +378,7 @@ const COMMANDS = [
       {
         name: 'geben',
         description: 'Vergibt einer Person eine Rolle',
-        type: 1, // SUB_COMMAND
+        type: 1,
         options: [
           { name: 'user', description: 'Betroffene Person', type: 6, required: true },
           { name: 'rolle', description: 'Zu vergebende Rolle', type: 8, required: true },
@@ -398,7 +398,7 @@ async function registerCommands() {
 }
 
 // ------------------------------------------------------------
-// Interaction-Handler (Slash-Commands)
+// Interaction-Handler
 // ------------------------------------------------------------
 function optionValue(options, name) {
   const opt = (options || []).find((o) => o.name === name);
@@ -408,7 +408,7 @@ function optionValue(options, name) {
 async function handleInteraction(interaction) {
   const { type, data, member, guild_id } = interaction;
 
-  if (type === 1) return { type: 1 }; // PING -> PONG
+  if (type === 1) return { type: 1 };
 
   if (type === 2) {
     const commandName = data.name;
@@ -427,7 +427,7 @@ async function handleInteraction(interaction) {
           return ephemeral('❌ Du darfst diesen Befehl nicht benutzen.');
         }
         const targetId = optionValue(data.options, 'user');
-        const allowBits = (1024 + 2048 + 65536).toString(); // View + Send + Read History
+        const allowBits = (1024 + 2048 + 65536).toString();
         const permRes = await discordFetch(`/channels/${interaction.channel_id}/permissions/${targetId}`, {
           method: 'PUT',
           body: JSON.stringify({ type: 1, allow: allowBits, deny: '0' }),
@@ -620,7 +620,6 @@ async function handleInteraction(interaction) {
         if (!listRes.ok) return ephemeral('❌ Nachrichten konnten nicht geladen werden.');
         const messages = await listRes.json();
 
-        // Discords Bulk-Delete funktioniert nur für Nachrichten < 14 Tage
         const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
         const deletable = messages.filter((m) => new Date(m.timestamp).getTime() > twoWeeksAgo).map((m) => m.id);
         const skipped = messages.length - deletable.length;
@@ -669,7 +668,7 @@ async function handleInteraction(interaction) {
 }
 
 // ------------------------------------------------------------
-// Ticket-Dashboard (Webseite): Kanäle live aus Discord lesen
+// Ticket-Dashboard
 // ------------------------------------------------------------
 async function listTicketChannels() {
   const res = await discordFetch(`/guilds/${DISCORD_GUILD_ID}/channels`);
@@ -683,7 +682,7 @@ async function listTicketChannels() {
 async function createTicketChannel(creator) {
   const name = `ticket-${(creator.username || 'user').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 20)}-${Date.now().toString().slice(-5)}`;
   const permissionOverwrites = [
-    { id: DISCORD_GUILD_ID, type: 0, deny: '1024' }, // @everyone: View Channel verbieten
+    { id: DISCORD_GUILD_ID, type: 0, deny: '1024' },
     { id: creator.id, type: 1, allow: (1024 + 2048 + 65536).toString() },
     ...STAFF_ROLE_IDS.map((roleId) => ({ id: roleId, type: 0, allow: (1024 + 2048 + 65536).toString() })),
   ];
@@ -720,10 +719,7 @@ async function closeTicketChannel(channelId, closedBy) {
 
 // ------------------------------------------------------------
 // Gateway-Client NUR für's Mitloggen eingehender DMs an den Bot
-// (Interactions-Webhooks bekommen normale Nachrichten nicht mit —
-//  das geht ausschließlich über die Gateway.)
-// Im Discord Developer Portal muss "Message Content Intent"
-// aktiviert sein, sonst ist message.content immer leer.
+// (Message Content Intent muss im Developer Portal aktiv sein!)
 // ------------------------------------------------------------
 const gatewayClient = new Client({
   intents: [GatewayIntentBits.DirectMessages, GatewayIntentBits.MessageContent],
@@ -744,17 +740,23 @@ gatewayClient.on('messageCreate', async (message) => {
         name: `${message.author.tag} (${message.author.id})`,
         iconURL: message.author.displayAvatarURL?.(),
       })
+      .setTitle('📩 Neue DM-Antwort')
       .setDescription(message.content || '*[kein Text / nur Anhang]*')
       .setColor(0xc9a24b)
+      .setFooter({ text: `User ID: ${message.author.id}` })
       .setTimestamp(message.createdAt);
 
     const attachmentLinks = message.attachments.size
       ? [...message.attachments.values()].map((a) => a.url).join('\n')
       : undefined;
 
+    if (attachmentLinks) {
+      embed.addFields({ name: '📎 Anhänge', value: attachmentLinks, inline: false });
+    }
+
     await postChannelMessage(DM_LOG_CHANNEL_ID, {
+      content: `<@${DM_LOG_OWNER_ID}> Antwort von <@${message.author.id}>`,
       embeds: [embed.toJSON()],
-      content: attachmentLinks,
     });
   } catch (err) {
     console.error('DM konnte nicht geloggt werden:', err);
@@ -772,12 +774,10 @@ const server = http.createServer(async (req, res) => {
 
   const rawBody = await readRawBody(req);
 
-  // GET / oder /health -> für Wach-Halte-Dienst
   if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
     return sendJson(res, 200, { status: 'ok' });
   }
 
-  // GET /register-commands -> einmalig im Browser aufrufen
   if (req.method === 'GET' && req.url === '/register-commands') {
     try {
       const result = await registerCommands();
@@ -787,7 +787,6 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // POST /discord-interactions -> Slash-Commands (Discord ruft das auf)
   if (req.method === 'POST' && req.url === '/discord-interactions') {
     const signature = req.headers['x-signature-ed25519'];
     const timestamp = req.headers['x-signature-timestamp'];
@@ -805,15 +804,11 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, response);
   }
 
-  // Ab hier: normale JSON-Endpunkte für die Webseite
   let bodyJson = {};
   try {
     bodyJson = rawBody.length ? JSON.parse(rawBody.toString('utf-8')) : {};
-  } catch (e) {
-    // ignore, bleibt {}
-  }
+  } catch (e) {}
 
-  // POST /check-role   { accessToken }
   if (req.method === 'POST' && req.url === '/check-role') {
     try {
       const { accessToken } = bodyJson;
@@ -828,7 +823,6 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // POST /save-law   { accessToken, slug, lawCode, lawTitle, newBody }
   if (req.method === 'POST' && req.url === '/save-law') {
     try {
       const { accessToken, slug, lawCode, lawTitle, newBody } = bodyJson;
@@ -855,8 +849,6 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // POST /publish-changelog   { accessToken, added: [], edited: [], removed: [] }
-  // Jeder Eintrag: { book: 'Strafgesetzbuch (StGB)', paragraph: '15a', title: 'Einbruchdiebstahl', note: 'neuer Tatbestand' }
   if (req.method === 'POST' && req.url === '/publish-changelog') {
     try {
       const { accessToken, added, edited, removed } = bodyJson;
@@ -877,7 +869,6 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // POST /tickets/list   { accessToken }
   if (req.method === 'POST' && req.url === '/tickets/list') {
     try {
       const { accessToken } = bodyJson;
@@ -893,7 +884,6 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // POST /tickets/create   { accessToken }
   if (req.method === 'POST' && req.url === '/tickets/create') {
     try {
       const { accessToken } = bodyJson;
@@ -907,7 +897,6 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // POST /tickets/close   { accessToken, channelId }
   if (req.method === 'POST' && req.url === '/tickets/close') {
     try {
       const { accessToken, channelId } = bodyJson;
