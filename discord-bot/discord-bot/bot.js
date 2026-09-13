@@ -1,12 +1,14 @@
 // ============================================================
 // Strada Gesetzbuch & Verwaltung – Backend-Server
-// Alles läuft über normale REST-Anfragen an Discord (keine
-// dauerhafte Gateway-Verbindung, siehe README für den Hintergrund).
+// REST-Interactions (keine dauerhafte Gateway-Verbindung) für
+// Slash-Commands + ein schlanker Gateway-Client NUR für's
+// Mitloggen eingehender DMs an den Bot.
 // ============================================================
 
 require('dotenv').config();
 const http = require('http');
 const nacl = require('tweetnacl');
+const { Client, GatewayIntentBits, Partials, EmbedBuilder } = require('discord.js');
 
 const {
   DISCORD_BOT_TOKEN,
@@ -28,6 +30,13 @@ const {
   PORT = 4000,
 } = process.env;
 
+// ---- Feste IDs (RP-Server-spezifisch) ----
+const EINSTELLEN_ALLOWED_ROLE_IDS = ['1537884709537714432', '1537884709537714431', '1537884709537714430'];
+const EINSTELLEN_AUTO_ROLE_ID = '1537884709483188307'; // wird jeder eingestellten Person automatisch gegeben
+const EINSTELLEN_ANNOUNCE_CHANNEL_ID = '1538223126230605967';
+const CHANGELOG_CHANNEL_ID = '1538161271374090333';
+const DM_LOG_CHANNEL_ID = '1548612480769728523';
+
 const required = { DISCORD_BOT_TOKEN, DISCORD_GUILD_ID, DISCORD_EDITOR_ROLE_IDS };
 for (const [key, value] of Object.entries(required)) {
   if (!value) {
@@ -39,12 +48,30 @@ if (!GITHUB_TOKEN || !GITHUB_REPO) {
   console.warn('WARNUNG: GITHUB_TOKEN/GITHUB_REPO nicht gesetzt – Speichern von Änderungen wird fehlschlagen.');
 }
 if (!DISCORD_PUBLIC_KEY) {
-  console.warn('WARNUNG: DISCORD_PUBLIC_KEY fehlt – Slash-Commands (/add, /einstellen, /warn, ...) funktionieren nicht.');
+  console.warn('WARNUNG: DISCORD_PUBLIC_KEY fehlt – Slash-Commands funktionieren nicht.');
 }
 
 const EDITOR_ROLE_IDS = DISCORD_EDITOR_ROLE_IDS.split(',').map((s) => s.trim());
 const STAFF_ROLE_IDS = (TICKET_STAFF_ROLE_IDS || '').split(',').map((s) => s.trim()).filter(Boolean);
 const DISCORD_API = 'https://discord.com/api/v10';
+
+// ------------------------------------------------------------
+// Berechtigungs-Bitflags (für Interaktionen ohne discord.js-Objekte)
+// ------------------------------------------------------------
+const PERMS = {
+  BAN_MEMBERS: 1n << 2n,
+  MANAGE_MESSAGES: 1n << 13n,
+  MANAGE_ROLES: 1n << 28n,
+  MODERATE_MEMBERS: 1n << 40n, // Timeout
+};
+
+function hasPermission(permissionsStr, flag) {
+  try {
+    return (BigInt(permissionsStr) & flag) === flag;
+  } catch {
+    return false;
+  }
+}
 
 // ------------------------------------------------------------
 // Kleine Discord-REST-Hilfsfunktionen
@@ -89,6 +116,16 @@ async function userHasStaffRole(userId) {
   if (!member) return false;
   const roles = member.roles || [];
   return roles.some((id) => STAFF_ROLE_IDS.includes(id));
+}
+
+async function addRoleToMember(userId, roleId) {
+  const res = await discordFetch(`/guilds/${DISCORD_GUILD_ID}/members/${userId}/roles/${roleId}`, {
+    method: 'PUT',
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Rolle konnte nicht vergeben werden (${res.status}): ${t}`);
+  }
 }
 
 async function postChannelMessage(channelId, payload) {
@@ -187,6 +224,47 @@ async function saveWarns(warns, sha, commitMessage) {
 }
 
 // ------------------------------------------------------------
+// Changelog-Nachricht bauen (für den "Posten"-Knopf auf der Website)
+// ------------------------------------------------------------
+function formatDateGerman(date) {
+  return date.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function buildChangelogMessage({ added = [], edited = [], removed = [] }) {
+  const date = formatDateGerman(new Date());
+
+  let text = `**Gesetzesupdate — ${date}**\n`;
+  text += `Das Department of Justice hat umfangreiche Gesetzesänderungen vorgenommen. `;
+  text += `Insgesamt wurden ${added.length} neue Paragraphen eingeführt, ${edited.length} bestehende überarbeitet`;
+  text += removed.length ? ` und ${removed.length} Paragraph${removed.length === 1 ? '' : 'en'} entfernt.\n\n` : `.\n\n`;
+  text += `Hier die wichtigsten Änderungen im Überblick:\n\n`;
+
+  const allChanges = [
+    ...added.map((c) => ({ ...c, kind: 'added' })),
+    ...edited.map((c) => ({ ...c, kind: 'edited' })),
+    ...removed.map((c) => ({ ...c, kind: 'removed' })),
+  ];
+
+  const byBook = {};
+  for (const change of allChanges) {
+    const book = change.book || 'Weitere Änderungen';
+    if (!byBook[book]) byBook[book] = [];
+    byBook[book].push(change);
+  }
+
+  for (const [book, changes] of Object.entries(byBook)) {
+    text += `**${book}**\n`;
+    for (const c of changes) {
+      text += `› §${c.paragraph} ${c.title} — ${c.note}\n`;
+    }
+    text += `\n`;
+  }
+
+  text += `— Department of Justice, Office of the Attorney General`;
+  return text;
+}
+
+// ------------------------------------------------------------
 // HTTP-Server: Grundgerüst, CORS, Body lesen (roh + JSON)
 // ------------------------------------------------------------
 function setCors(res) {
@@ -235,12 +313,12 @@ const COMMANDS = [
     name: 'einstellen',
     description: 'Stellt jemanden offiziell ein',
     options: [
-      { name: 'name', description: 'Name der Person', type: 3, required: true },
+      { name: 'spieler', description: 'Person, die eingestellt wird', type: 6, required: true },
       { name: 'rang', description: 'Rang/Rolle', type: 8, required: true },
     ],
   },
   {
-    name: 'kündigen',
+    name: 'kündigung',
     description: 'Kündigt jemandem offiziell',
     options: [
       { name: 'spieler', description: 'Die gekündigte Person', type: 6, required: true },
@@ -260,6 +338,53 @@ const COMMANDS = [
     name: 'bezahlt',
     description: 'Markiert die älteste offene Verwarnung als bezahlt',
     options: [{ name: 'user', description: 'Betroffene Person', type: 6, required: true }],
+  },
+  {
+    name: 'dm',
+    description: 'Sendet einer Person eine offizielle Nachricht per DM',
+    options: [
+      { name: 'user', description: 'Empfänger', type: 6, required: true },
+      { name: 'nachricht', description: 'Nachricht, die gesendet wird', type: 3, required: true },
+    ],
+  },
+  {
+    name: 'ban',
+    description: 'Bannt eine Person vom Server',
+    options: [
+      { name: 'user', description: 'Zu bannende Person', type: 6, required: true },
+      { name: 'grund', description: 'Grund des Banns', type: 3, required: false },
+    ],
+  },
+  {
+    name: 'timeout',
+    description: 'Versetzt eine Person in Timeout',
+    options: [
+      { name: 'user', description: 'Betroffene Person', type: 6, required: true },
+      { name: 'minuten', description: 'Dauer in Minuten', type: 4, required: true },
+      { name: 'grund', description: 'Grund', type: 3, required: false },
+    ],
+  },
+  {
+    name: 'clear',
+    description: 'Löscht mehrere Nachrichten in diesem Kanal',
+    options: [
+      { name: 'anzahl', description: 'Anzahl der zu löschenden Nachrichten (1-100)', type: 4, required: true },
+    ],
+  },
+  {
+    name: 'rolle',
+    description: 'Rollenverwaltung',
+    options: [
+      {
+        name: 'geben',
+        description: 'Vergibt einer Person eine Rolle',
+        type: 1, // SUB_COMMAND
+        options: [
+          { name: 'user', description: 'Betroffene Person', type: 6, required: true },
+          { name: 'rolle', description: 'Zu vergebende Rolle', type: 8, required: true },
+        ],
+      },
+    ],
   },
 ];
 
@@ -289,6 +414,7 @@ async function handleInteraction(interaction) {
     const commandName = data.name;
     const invokerId = member?.user?.id;
     const invokerRoles = member?.roles || [];
+    const invokerPerms = member?.permissions;
     const resolved = data.resolved || {};
 
     const ephemeral = (content) => ({ type: 4, data: { content, flags: 64 } });
@@ -312,25 +438,42 @@ async function handleInteraction(interaction) {
 
       // ---------------- /einstellen ----------------
       if (commandName === 'einstellen') {
-        const name = optionValue(data.options, 'name');
+        if (!EINSTELLEN_ALLOWED_ROLE_IDS.some((id) => invokerRoles.includes(id))) {
+          return ephemeral('❌ Du darfst diesen Befehl nicht benutzen.');
+        }
+        const spielerId = optionValue(data.options, 'spieler');
         const rangRoleId = optionValue(data.options, 'rang');
         const issuerRang = await getTopRoleMention(invokerRoles);
+
+        try {
+          await addRoleToMember(spielerId, EINSTELLEN_AUTO_ROLE_ID);
+        } catch (err) {
+          console.error(err);
+          return ephemeral('❌ Rolle konnte nicht vergeben werden: ' + err.message);
+        }
+
         const text =
-          `[+] Hiermit wird ${name} mit sofortiger Wirkung als <@&${rangRoleId}> eingestellt.\n` +
+          `Hiermit wird mit sofortiger Wirkung <@${spielerId}> als <@&${rangRoleId}> eingestellt.\n` +
           `LG. ${issuerRang ? issuerRang + ' ' : ''}<@${invokerId}>`;
-        if (EINSTELLEN_CHANNEL_ID) await postChannelMessage(EINSTELLEN_CHANNEL_ID, { content: text });
-        return ephemeral('✅ Einstellungsmeldung wurde gepostet.');
+
+        await postChannelMessage(EINSTELLEN_ANNOUNCE_CHANNEL_ID, { content: text });
+        return ephemeral('✅ Einstellungsmeldung wurde gepostet und Rolle vergeben.');
       }
 
-      // ---------------- /kündigen ----------------
-      if (commandName === 'kündigen') {
-        const targetId = optionValue(data.options, 'spieler');
+      // ---------------- /kündigung ----------------
+      if (commandName === 'kündigung') {
+        if (!EINSTELLEN_ALLOWED_ROLE_IDS.some((id) => invokerRoles.includes(id))) {
+          return ephemeral('❌ Du darfst diesen Befehl nicht benutzen.');
+        }
+        const spielerId = optionValue(data.options, 'spieler');
         const grund = optionValue(data.options, 'grund');
         const issuerRang = await getTopRoleMention(invokerRoles);
+
         const text =
-          `[-] Hiermit wird <@${targetId}> mit sofortiger Wirkung gekündigt. Grund: ${grund}\n` +
+          `Hiermit wird mit sofortiger Wirkung <@${spielerId}> gekündigt. Grund: ${grund}\n` +
           `LG. ${issuerRang ? issuerRang + ' ' : ''}<@${invokerId}>`;
-        if (EINSTELLEN_CHANNEL_ID) await postChannelMessage(EINSTELLEN_CHANNEL_ID, { content: text });
+
+        await postChannelMessage(EINSTELLEN_ANNOUNCE_CHANNEL_ID, { content: text });
         return ephemeral('✅ Kündigungsmeldung wurde gepostet.');
       }
 
@@ -404,6 +547,117 @@ async function handleInteraction(interaction) {
         return ephemeral(`✅ Verwarnung von <@${targetId}> wurde als bezahlt markiert.`);
       }
 
+      // ---------------- /dm ----------------
+      if (commandName === 'dm') {
+        if (!STAFF_ROLE_IDS.some((id) => invokerRoles.includes(id))) {
+          return ephemeral('❌ Du darfst diesen Befehl nicht benutzen.');
+        }
+        const targetId = optionValue(data.options, 'user');
+        const nachricht = optionValue(data.options, 'nachricht');
+        try {
+          const dmChannelRes = await discordFetch('/users/@me/channels', {
+            method: 'POST',
+            body: JSON.stringify({ recipient_id: targetId }),
+          });
+          if (!dmChannelRes.ok) throw new Error(`DM-Kanal konnte nicht erstellt werden (${dmChannelRes.status})`);
+          const dmChannel = await dmChannelRes.json();
+          await postChannelMessage(dmChannel.id, { content: nachricht });
+          return ephemeral('✅ DM wurde gesendet.');
+        } catch (err) {
+          console.error(err);
+          return ephemeral('❌ DM konnte nicht gesendet werden (Person hat evtl. DMs deaktiviert).');
+        }
+      }
+
+      // ---------------- /ban ----------------
+      if (commandName === 'ban') {
+        if (!hasPermission(invokerPerms, PERMS.BAN_MEMBERS)) {
+          return ephemeral('❌ Dir fehlt die Berechtigung "Mitglieder bannen".');
+        }
+        const targetId = optionValue(data.options, 'user');
+        const grund = optionValue(data.options, 'grund') || 'Kein Grund angegeben';
+        const res = await discordFetch(`/guilds/${DISCORD_GUILD_ID}/bans/${targetId}`, {
+          method: 'PUT',
+          headers: { 'X-Audit-Log-Reason': encodeURIComponent(grund) },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) return ephemeral('❌ Bann fehlgeschlagen (Bot-Rolle evtl. zu niedrig in der Hierarchie).');
+        return publicReply(`🔨 <@${targetId}> wurde gebannt.\n**Grund:** ${grund}`);
+      }
+
+      // ---------------- /timeout ----------------
+      if (commandName === 'timeout') {
+        if (!hasPermission(invokerPerms, PERMS.MODERATE_MEMBERS)) {
+          return ephemeral('❌ Dir fehlt die Berechtigung "Mitglieder zeitweise stummschalten".');
+        }
+        const targetId = optionValue(data.options, 'user');
+        const minuten = optionValue(data.options, 'minuten');
+        const grund = optionValue(data.options, 'grund') || 'Kein Grund angegeben';
+        if (!minuten || minuten < 1 || minuten > 40320) {
+          return ephemeral('❌ Bitte eine Dauer zwischen 1 und 40320 Minuten (28 Tage) angeben.');
+        }
+        const until = new Date(Date.now() + minuten * 60 * 1000).toISOString();
+        const res = await discordFetch(`/guilds/${DISCORD_GUILD_ID}/members/${targetId}`, {
+          method: 'PATCH',
+          headers: { 'X-Audit-Log-Reason': encodeURIComponent(grund) },
+          body: JSON.stringify({ communication_disabled_until: until }),
+        });
+        if (!res.ok) return ephemeral('❌ Timeout fehlgeschlagen (Bot-Rolle evtl. zu niedrig).');
+        return publicReply(`🔇 <@${targetId}> wurde für ${minuten} Minute(n) stummgeschaltet.\n**Grund:** ${grund}`);
+      }
+
+      // ---------------- /clear ----------------
+      if (commandName === 'clear') {
+        if (!hasPermission(invokerPerms, PERMS.MANAGE_MESSAGES)) {
+          return ephemeral('❌ Dir fehlt die Berechtigung "Nachrichten verwalten".');
+        }
+        const anzahl = optionValue(data.options, 'anzahl');
+        if (!anzahl || anzahl < 1 || anzahl > 100) {
+          return ephemeral('❌ Bitte eine Zahl zwischen 1 und 100 angeben.');
+        }
+
+        const listRes = await discordFetch(`/channels/${interaction.channel_id}/messages?limit=${anzahl}`);
+        if (!listRes.ok) return ephemeral('❌ Nachrichten konnten nicht geladen werden.');
+        const messages = await listRes.json();
+
+        // Discords Bulk-Delete funktioniert nur für Nachrichten < 14 Tage
+        const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+        const deletable = messages.filter((m) => new Date(m.timestamp).getTime() > twoWeeksAgo).map((m) => m.id);
+        const skipped = messages.length - deletable.length;
+
+        if (deletable.length === 1) {
+          await discordFetch(`/channels/${interaction.channel_id}/messages/${deletable[0]}`, { method: 'DELETE' });
+        } else if (deletable.length > 1) {
+          await discordFetch(`/channels/${interaction.channel_id}/messages/bulk-delete`, {
+            method: 'POST',
+            body: JSON.stringify({ messages: deletable }),
+          });
+        }
+
+        let msg = `✅ ${deletable.length} Nachricht(en) gelöscht.`;
+        if (skipped > 0) msg += ` (${skipped} übersprungen, da älter als 14 Tage)`;
+        return ephemeral(msg);
+      }
+
+      // ---------------- /rolle geben ----------------
+      if (commandName === 'rolle') {
+        const sub = data.options?.[0];
+        if (sub?.name === 'geben') {
+          if (!hasPermission(invokerPerms, PERMS.MANAGE_ROLES)) {
+            return ephemeral('❌ Dir fehlt die Berechtigung "Rollen verwalten".');
+          }
+          const targetId = optionValue(sub.options, 'user');
+          const roleId = optionValue(sub.options, 'rolle');
+          try {
+            await addRoleToMember(targetId, roleId);
+            return ephemeral(`✅ <@&${roleId}> wurde an <@${targetId}> vergeben.`);
+          } catch (err) {
+            return ephemeral('❌ Rolle konnte nicht vergeben werden: ' + err.message);
+          }
+        }
+        return ephemeral('❓ Unbekannter Unterbefehl.');
+      }
+
       return ephemeral('❓ Unbekannter Befehl.');
     } catch (err) {
       console.error('Interaction-Fehler:', err);
@@ -463,6 +717,51 @@ async function closeTicketChannel(channelId, closedBy) {
   const res = await discordFetch(`/channels/${channelId}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`Ticket-Kanal konnte nicht gelöscht werden (${res.status})`);
 }
+
+// ------------------------------------------------------------
+// Gateway-Client NUR für's Mitloggen eingehender DMs an den Bot
+// (Interactions-Webhooks bekommen normale Nachrichten nicht mit —
+//  das geht ausschließlich über die Gateway.)
+// Im Discord Developer Portal muss "Message Content Intent"
+// aktiviert sein, sonst ist message.content immer leer.
+// ------------------------------------------------------------
+const gatewayClient = new Client({
+  intents: [GatewayIntentBits.DirectMessages, GatewayIntentBits.MessageContent],
+  partials: [Partials.Channel, Partials.Message],
+});
+
+gatewayClient.once('ready', () => {
+  console.log(`Gateway-Client eingeloggt als ${gatewayClient.user.tag} (nur für DM-Logging)`);
+});
+
+gatewayClient.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+  if (message.channel.type !== 1) return; // 1 = DM-Kanal
+
+  try {
+    const embed = new EmbedBuilder()
+      .setAuthor({
+        name: `${message.author.tag} (${message.author.id})`,
+        iconURL: message.author.displayAvatarURL?.(),
+      })
+      .setDescription(message.content || '*[kein Text / nur Anhang]*')
+      .setColor(0xc9a24b)
+      .setTimestamp(message.createdAt);
+
+    const attachmentLinks = message.attachments.size
+      ? [...message.attachments.values()].map((a) => a.url).join('\n')
+      : undefined;
+
+    await postChannelMessage(DM_LOG_CHANNEL_ID, {
+      embeds: [embed.toJSON()],
+      content: attachmentLinks,
+    });
+  } catch (err) {
+    console.error('DM konnte nicht geloggt werden:', err);
+  }
+});
+
+gatewayClient.login(DISCORD_BOT_TOKEN);
 
 // ------------------------------------------------------------
 // HTTP-Routen
@@ -548,6 +847,28 @@ const server = http.createServer(async (req, res) => {
       law.body = newBody;
       await githubUpdateFile(GITHUB_DATA_PATH, json, sha, `Gesetz geändert: ${lawCode || slug} (von ${me.username})`);
       await postChangeNotification({ lawCode, lawTitle, editorName: me.username, summary: 'Der Gesetzestext wurde über die Webseite bearbeitet.' });
+
+      return sendJson(res, 200, { ok: true });
+    } catch (err) {
+      console.error(err);
+      return sendJson(res, 500, { error: 'internal_error', message: err.message });
+    }
+  }
+
+  // POST /publish-changelog   { accessToken, added: [], edited: [], removed: [] }
+  // Jeder Eintrag: { book: 'Strafgesetzbuch (StGB)', paragraph: '15a', title: 'Einbruchdiebstahl', note: 'neuer Tatbestand' }
+  if (req.method === 'POST' && req.url === '/publish-changelog') {
+    try {
+      const { accessToken, added, edited, removed } = bodyJson;
+      if (!accessToken) return sendJson(res, 400, { error: 'accessToken fehlt' });
+
+      const me = await getDiscordUserFromToken(accessToken);
+      if (!me) return sendJson(res, 401, { error: 'ungueltiges Token' });
+      const roleCheck = await userHasEditorRole(me.id);
+      if (!roleCheck.allowed) return sendJson(res, 403, { error: 'keine Berechtigung' });
+
+      const message = buildChangelogMessage({ added, edited, removed });
+      await postChannelMessage(CHANGELOG_CHANNEL_ID, { content: message });
 
       return sendJson(res, 200, { ok: true });
     } catch (err) {
