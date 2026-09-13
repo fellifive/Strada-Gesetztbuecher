@@ -726,8 +726,20 @@ const gatewayClient = new Client({
   partials: [Partials.Channel, Partials.Message],
 });
 
-gatewayClient.once('ready', () => {
-  console.log(`Gateway-Client eingeloggt als ${gatewayClient.user.tag} (nur für DM-Logging)`);
+gatewayClient.once('ready', async () => {
+  console.log(`Gateway-Client eingeloggt als ${gatewayClient.user.tag}`);
+
+  // Slash-Commands automatisch bei Discord registrieren
+  try {
+    const result = await registerCommands();
+    if (result.status >= 200 && result.status < 300) {
+      console.log('✅ Slash-Commands erfolgreich registriert:', result.body);
+    } else {
+      console.error('❌ Registrierung fehlgeschlagen. Status:', result.status, 'Antwort:', result.body);
+    }
+  } catch (err) {
+    console.error('❌ Fehler beim Registrieren der Commands:', err);
+  }
 });
 
 gatewayClient.on('messageCreate', async (message) => {
