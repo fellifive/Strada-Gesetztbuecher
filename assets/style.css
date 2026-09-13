@@ -22,7 +22,7 @@ html, body {
 body {
   background-image: radial-gradient(circle at 50% 0%, #1a1e29 0%, #0b0d12 60%);
   min-height: 100vh;
-  
+
 }
 a { color: var(--gold-light); }
 
