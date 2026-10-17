@@ -58,5 +58,15 @@
     "createdBy": "957211762657230858",
     "createdAt": 1792253854648,
     "messageId": "1561050552547410057"
+  },
+  {
+    "id": "panel-1792253869003",
+    "name": "Strada Supreme Court Tickets",
+    "description": "Gericht für Revisions & Verfassungssachen.",
+    "channelId": "1537893954886836234",
+    "categoryId": null,
+    "createdBy": "957211762657230858",
+    "createdAt": 1792253869003,
+    "messageId": "1561050613389856869"
   }
 ]
