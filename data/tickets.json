@@ -27,5 +27,17 @@
         "timestamp": "2026-10-17T10:41:47.129000+00:00"
       }
     ]
+  },
+  {
+    "id": "957211762657230858-1792253517836",
+    "channelId": "1561049137619931247",
+    "userId": "957211762657230858",
+    "username": "felifive",
+    "panelId": null,
+    "panelName": null,
+    "status": "open",
+    "claimedBy": null,
+    "addedUsers": [],
+    "createdAt": 1792253517836
   }
 ]
