@@ -48,5 +48,15 @@
     "createdBy": "957211762657230858",
     "createdAt": 1792253808942,
     "messageId": "1561050361131700386"
+  },
+  {
+    "id": "panel-1792253854648",
+    "name": "Strada District Court Tickets",
+    "description": "Gericht für alle erstinstanzlichen Anliegen",
+    "channelId": "1537893954886836234",
+    "categoryId": null,
+    "createdBy": "957211762657230858",
+    "createdAt": 1792253854648,
+    "messageId": "1561050552547410057"
   }
 ]
