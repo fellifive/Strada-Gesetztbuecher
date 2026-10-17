@@ -18,5 +18,15 @@
     "createdBy": "957211762657230858",
     "createdAt": 1792253540649,
     "messageId": "1561049236781662371"
+  },
+  {
+    "id": "panel-1792253773137",
+    "name": "Strada Bar Association Tickets",
+    "description": "Zulassung und Kontrolle von Rechtsanwälten.",
+    "channelId": "1537893954886836234",
+    "categoryId": null,
+    "createdBy": "957211762657230858",
+    "createdAt": 1792253773137,
+    "messageId": "1561050211009302679"
   }
 ]
