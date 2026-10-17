@@ -20,16 +20,6 @@
     "messageId": "1561049236781662371"
   },
   {
-    "id": "panel-1792253650129",
-    "name": "Senora City District Attorney Tickets",
-    "description": "Strafsachen (Strafanzeige, Strafanträge)",
-    "channelId": "1537893954886836234",
-    "categoryId": null,
-    "createdBy": "957211762657230858",
-    "createdAt": 1792253650129,
-    "messageId": "1561049694728228937"
-  },
-  {
     "id": "panel-1792253679640",
     "name": "Senora City District Court Tickets",
     "description": "Gericht für alle erstinstanzlichen Anliegen",
