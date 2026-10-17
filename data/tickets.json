@@ -6,9 +6,26 @@
     "username": "felifive",
     "panelId": "panel-1792233675744",
     "panelName": "Bewerbung",
-    "status": "open",
+    "status": "closed",
     "claimedBy": "957211762657230858",
     "addedUsers": [],
-    "createdAt": 1792233682323
+    "createdAt": 1792233682323,
+    "closedAt": 1792233718307,
+    "closedBy": "957211762657230858",
+    "closeReason": "Kein Grund angegeben",
+    "transcript": [
+      {
+        "author": "DOJ Bot",
+        "authorId": "1541565433877110876",
+        "content": "🎫 Willkommen <@957211762657230858>! Thema: **Bewerbung** Das Team kümmert sich gleich um dein Anliegen.",
+        "timestamp": "2026-10-17T10:41:22.222000+00:00"
+      },
+      {
+        "author": "DOJ Bot",
+        "authorId": "1541565433877110876",
+        "content": "✅ Ticket von <@957211762657230858> übernommen.",
+        "timestamp": "2026-10-17T10:41:47.129000+00:00"
+      }
+    ]
   }
 ]
