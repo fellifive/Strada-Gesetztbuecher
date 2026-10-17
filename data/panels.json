@@ -38,5 +38,15 @@
     "createdBy": "957211762657230858",
     "createdAt": 1792253793959,
     "messageId": "1561050298456346635"
+  },
+  {
+    "id": "panel-1792253808942",
+    "name": "Strada District Attorney Tickets",
+    "description": "Strafsachen (Strafanzeige, Strafanträge)",
+    "channelId": "1537893954886836234",
+    "categoryId": null,
+    "createdBy": "957211762657230858",
+    "createdAt": 1792253808942,
+    "messageId": "1561050361131700386"
   }
 ]
