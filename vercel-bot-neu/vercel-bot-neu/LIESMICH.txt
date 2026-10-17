@@ -1,0 +1,13 @@
+STRUKTUR (so muss es auf GitHub aussehen):
+
+  vercel-bot-neu/
+  ├── api/        (7 Dateien)
+  ├── lib/        (3 Dateien)
+  ├── package.json
+  └── env-example.txt
+
+WICHTIG: Beim Hochladen auf GitHub darauf achten, dass die Ordner
+"api" und "lib" erhalten bleiben (nicht als lose Einzeldateien).
+In Vercel bei Root Directory den Pfad zu diesem Ordner eintragen.
+
+Neue Umgebungsvariablen: siehe env-example.txt

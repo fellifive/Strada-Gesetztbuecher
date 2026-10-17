@@ -1,0 +1,8 @@
+{
+  "name": "strada-backend-vercel",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "tweetnacl": "^1.0.3"
+  }
+}
