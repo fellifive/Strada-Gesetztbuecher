@@ -8,5 +8,15 @@
     "createdBy": "957211762657230858",
     "createdAt": 1792253515121,
     "messageId": "1561049128983863427"
+  },
+  {
+    "id": "panel-1792253540649",
+    "name": "Department of Justice Tickets",
+    "description": "Sonderlizenzen, Gesetzessachen, Beschwerdeinstanz gegen Behörden.",
+    "channelId": "1537893954886836234",
+    "categoryId": null,
+    "createdBy": "957211762657230858",
+    "createdAt": 1792253540649,
+    "messageId": "1561049236781662371"
   }
 ]
