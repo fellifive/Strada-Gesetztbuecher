@@ -28,5 +28,15 @@
     "createdBy": "957211762657230858",
     "createdAt": 1792253603252,
     "messageId": "1561049499474993163"
+  },
+  {
+    "id": "panel-1792253632993",
+    "name": "Senora City Clerk Tickets",
+    "description": "Allgemeine Verwaltungssachen: Eheanträge, Adoptionsanträge, Gewerbeanmeldungen, Presseausweis, Bürgersachen, etc.",
+    "channelId": "1537893954886836234",
+    "categoryId": null,
+    "createdBy": "957211762657230858",
+    "createdAt": 1792253632993,
+    "messageId": "1561049623282323648"
   }
 ]
