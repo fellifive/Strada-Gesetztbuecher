@@ -20,16 +20,6 @@
     "messageId": "1561049236781662371"
   },
   {
-    "id": "panel-1792253679640",
-    "name": "Senora City District Court Tickets",
-    "description": "Gericht für alle erstinstanzlichen Anliegen",
-    "channelId": "1537893954886836234",
-    "categoryId": null,
-    "createdBy": "957211762657230858",
-    "createdAt": 1792253679640,
-    "messageId": "1561049818724442134"
-  },
-  {
     "id": "panel-1792253692532",
     "name": "Senora City Supreme Court Tickets",
     "description": "Gericht für Revisions & Verfassungssachen.",
