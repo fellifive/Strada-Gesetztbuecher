@@ -28,5 +28,15 @@
     "createdBy": "957211762657230858",
     "createdAt": 1792253773137,
     "messageId": "1561050211009302679"
+  },
+  {
+    "id": "panel-1792253793959",
+    "name": "Strada Clerk Tickets",
+    "description": "Allgemeine Verwaltungssachen: Eheanträge, Adoptionsanträge, Gewerbeanmeldungen, Presseausweis, Bürgersachen, etc.",
+    "channelId": "1537893954886836234",
+    "categoryId": null,
+    "createdBy": "957211762657230858",
+    "createdAt": 1792253793959,
+    "messageId": "1561050298456346635"
   }
 ]
