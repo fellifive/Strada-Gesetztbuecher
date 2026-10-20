@@ -39,5 +39,17 @@
     "claimedBy": null,
     "addedUsers": [],
     "createdAt": 1792253517836
+  },
+  {
+    "id": "1527376948471402586-1792522715925",
+    "channelId": "1562178236807520308",
+    "userId": "1527376948471402586",
+    "username": "uninteressantoderso",
+    "panelId": "panel-1792253515121",
+    "panelName": "DOJ-Bewerbung",
+    "status": "open",
+    "claimedBy": null,
+    "addedUsers": [],
+    "createdAt": 1792522715925
   }
 ]
