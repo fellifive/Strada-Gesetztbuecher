@@ -272,12 +272,23 @@ async function renderTicketTab() {
           <button class="save-btn" onclick="ticketAction('close-ticket','${esc(t.id)}')">Schließen</button></div></div>`).join('');
   }
   if (TICKET_TAB === 'panels') {
+    const mr = await api('tickets-manage', { action: 'list-multipanels', payload: {} });
+    const multis = mr.data.multipanels || [];
     body.innerHTML = `<div class="row-card form">
         <input id="pn-name" placeholder="Panel-Name"><input id="pn-desc" placeholder="Beschreibung">
         <input id="pn-channel" placeholder="Kanal-ID (wo das Panel erscheint)"><input id="pn-cat" placeholder="Kategorie-ID (optional)">
         <button class="save-btn" onclick="createPanel()">Panel erstellen</button></div>` +
       (d.panels.length ? d.panels.map((p) => `<div class="row-card"><div><div class="chip-code">${esc(p.name)}</div><div class="chip-title">${esc(p.description)}</div></div>
-        <button class="cancel-btn" onclick="deletePanel('${esc(p.id)}')">Löschen</button></div>`).join('') : '<p>Noch keine Panels.</p>');
+        <button class="cancel-btn" onclick="deletePanel('${esc(p.id)}')">Löschen</button></div>`).join('') : '<p>Noch keine Panels.</p>') +
+      `<h3 class="sec-head" style="margin-top:28px">Multi-Panel: mehrere Panels in einer Nachricht</h3>` +
+      (d.panels.length < 2 ? '<p class="muted">Dafür brauchst du mindestens 2 Panels.</p>' :
+        `<div class="row-card form">
+          <input id="mp-title" placeholder="Titel der Nachricht"><input id="mp-desc" placeholder="Einleitungstext (optional)">
+          <input id="mp-channel" placeholder="Kanal-ID (wo die Nachricht erscheint)">
+          <div class="checks">${d.panels.map((p) => `<label><input type="checkbox" class="mp-check" value="${esc(p.id)}"> ${esc(p.name)}</label>`).join('')}</div>
+          <button class="save-btn" onclick="createMultiPanel()">Multi-Panel erstellen</button></div>`) +
+      multis.map((m) => `<div class="row-card"><div><div class="chip-code">${esc(m.title)}</div><div class="chip-title">${m.panelIds.length} Panels in einer Nachricht</div></div>
+        <button class="cancel-btn" onclick="deleteMultiPanel('${esc(m.id)}')">Löschen</button></div>`).join('');
   }
   if (TICKET_TAB === 'transcripts') {
     const r2 = await api('tickets-manage', { action: 'list-transcripts', payload: {} });
@@ -307,6 +318,7 @@ async function ticketAction(action, ticketId) {
   if (action === 'close-ticket' && !confirm('Ticket wirklich schließen?')) return;
   const r = await api('tickets-manage', { action, payload: { ticketId } });
   if (!r.ok) alert('Fehler: ' + (r.data.error || 'unbekannt'));
+  else if (action === 'close-ticket' && r.data.channelDeleted === false) alert('Ticket geschlossen, aber der Kanal konnte nicht gelöscht werden. Dem Bot fehlt vermutlich das Recht „Kanäle verwalten“.');
   renderTickets();
 }
 async function createPanel() {
@@ -314,6 +326,20 @@ async function createPanel() {
   if (!v('pn-name') || !v('pn-channel')) { alert('Name und Kanal-ID sind Pflicht.'); return; }
   const r = await api('tickets-manage', { action: 'create-panel', payload: { name: v('pn-name'), description: v('pn-desc'), channelId: v('pn-channel'), categoryId: v('pn-cat') || null } });
   if (!r.ok) alert('Fehler: ' + (r.data.error || r.data.message || 'unbekannt'));
+  renderTickets();
+}
+async function createMultiPanel() {
+  const v = (i) => document.getElementById(i).value.trim();
+  const panelIds = [...document.querySelectorAll('.mp-check:checked')].map((c) => c.value);
+  if (panelIds.length < 2) { alert('Wähle mindestens 2 Panels aus.'); return; }
+  if (!v('mp-title') || !v('mp-channel')) { alert('Titel und Kanal-ID sind Pflicht.'); return; }
+  const r = await api('tickets-manage', { action: 'create-multipanel', payload: { title: v('mp-title'), description: v('mp-desc'), channelId: v('mp-channel'), panelIds } });
+  if (!r.ok) alert('Fehler: ' + (r.data.error || r.data.message || 'unbekannt'));
+  renderTickets();
+}
+async function deleteMultiPanel(multiId) {
+  if (!confirm('Multi-Panel löschen? Die Nachricht im Kanal wird auch entfernt.')) return;
+  await api('tickets-manage', { action: 'delete-multipanel', payload: { multiId } });
   renderTickets();
 }
 async function deletePanel(panelId) {
@@ -344,7 +370,7 @@ function renderAuthArea() {
     return;
   }
   area.innerHTML = `<div class="user-chip"><span class="name">${esc(CURRENT_USER.username)}</span>
-    ${CURRENT_USER.allowed ? '<span class="role-badge">Editor</span>' : ''}
+    ${CURRENT_USER.allowed ? '<span class="role-badge">Editor</span>' : `<span class="role-badge off" title="${esc(CURRENT_USER.why)}">kein Editor: ${esc(CURRENT_USER.why)}</span>`}
     <button class="logout-btn" onclick="logout()">Abmelden</button></div>`;
 }
 function loginWithDiscord() {
@@ -375,8 +401,16 @@ async function loginWithToken(accessToken, silent = false) {
     if (!meRes.ok) throw new Error('token invalid');
     const me = await meRes.json();
     const roleRes = await fetch(`${CFG.BACKEND_URL}/api/check-role`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accessToken }) });
-    const roleData = await roleRes.json();
-    CURRENT_USER = { id: me.id, username: me.username, accessToken, allowed: !!roleData.allowed };
+    let roleData = {};
+    try { roleData = await roleRes.json(); } catch (e) { roleData = { error: 'Antwort nicht lesbar (HTTP ' + roleRes.status + ')' }; }
+    let why = '';
+    if (!roleData.allowed) {
+      if (!roleRes.ok || roleData.error) why = 'Server-Fehler: ' + (roleData.message || roleData.error || ('HTTP ' + roleRes.status));
+      else if (roleData.reason === 'not_in_guild') why = 'nicht auf dem Discord-Server gefunden';
+      else if (roleData.reason === 'missing_role') why = 'dir fehlt die Editor-Rolle';
+      else why = roleData.reason || 'unbekannt';
+    }
+    CURRENT_USER = { id: me.id, username: me.username, accessToken, allowed: !!roleData.allowed, why };
     sessionStorage.setItem('discord_session', JSON.stringify({ accessToken }));
     renderAuthArea();
   } catch (err) {
