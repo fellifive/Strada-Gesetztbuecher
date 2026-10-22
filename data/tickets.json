@@ -51,5 +51,17 @@
     "claimedBy": null,
     "addedUsers": [],
     "createdAt": 1792522715925
+  },
+  {
+    "id": "465697502851498004-1792701723001",
+    "channelId": "1562929045795246204",
+    "userId": "465697502851498004",
+    "username": "younes_110",
+    "panelId": "panel-1792253869003",
+    "panelName": "Strada Supreme Court Tickets",
+    "status": "open",
+    "claimedBy": null,
+    "addedUsers": [],
+    "createdAt": 1792701723001
   }
 ]
